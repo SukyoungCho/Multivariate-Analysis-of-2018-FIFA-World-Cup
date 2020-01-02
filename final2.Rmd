@@ -1,0 +1,176 @@
+---
+title: "Final Project"
+author: "Turkmnistan"
+date: '2019 11 27 '
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(devtools)
+library(ggplot2)
+worldcup <- read.csv("worldcup2018.csv")
+row.names(worldcup) <- worldcup$Countries
+worldcup2 <- worldcup[, -1]
+#worldcup2
+worldcup2$Possession <- worldcup2$Possession/100
+summary(worldcup2)
+
+worldcup2 <- worldcup2[,-7]
+
+#num_df <- worldcup2[, -10]
+num_df <- worldcup2[, -9]
+apply(num_df, 2, var) #Shots has the highest variance
+
+#PCA
+worldcup_pca <- prcomp(num_df, scale = TRUE)
+summary(worldcup_pca)
+print(worldcup_pca)
+
+#Scree
+screeplot(worldcup_pca, main = "", col = "green", type = "lines", pch = 1, npcs = length(worldcup_pca$sdev))
+
+worldcup_pca$rotation <- -worldcup_pca$rotation
+worldcup_pca$x <- -worldcup_pca$x
+biplot(worldcup_pca)
+```
+
+##Biplot pair
+```{r}
+pairs(worldcup_pca$x[,1:4],
+panel=function(x,y,...){
+  text(x,y,cex=1,abbreviate(rownames(worldcup2)),col=c('red','green','blue'))
+  #bvbox(cbind(x,y),add=TRUE)
+})
+```
+
+## same as biplot
+```{r fig.height= 6, fig,width= 35}
+library(ggfortify)
+autoplot(worldcup_pca, data = worldcup2, colour = 'Result',
+         label = TRUE, label.size = 5, 
+         loadings = TRUE, loadings.colour = 'black',
+         loadings.label = TRUE, 
+         loadings.label.size = 10, 
+         loadings.label.colour = "black") + 
+  theme(legend.text = element_text(size = 16), 
+        legend.title = element_text(size = 24), 
+        axis.title = element_text(size = 14))
+```
+
+### put this
+```{r}
+library(psych)
+pairs.panels(worldcup2[,-9], cex.cor = 2)
+
+win <- worldcup2[worldcup2$Result == "W", ]
+draw <- worldcup2[worldcup2$Result == "D", ]
+lose <-worldcup2[worldcup2$Result == "L", ]
+
+pairs.panels(win[,-9], cex.cor = 2)
+pairs.panels(draw[,-9], cex.cor = 2)
+pairs.panels(lose[,-9], cex.cor = 2)
+
+#cor(win)
+#cor(draw)
+#cor(lose)
+
+```
+
+```{r}
+## Seems useless
+worldcup2$Result <- as.numeric(as.factor(worldcup2$Result))
+plot(worldcup2$Result, worldcup_pca$x[,1])
+cor(worldcup2$Result, worldcup_pca$x[,1])
+
+yv <- predict(worldcup_pca)[, 1]
+yv2 <- predict(worldcup_pca)[, 2]
+par(mfrow = c(1,2))
+plot(worldcup2$Result, yv, pch = 16, xlab = "biomass", ylab = "PC 1", col = "red")
+plot(worldcup2$Result, yv2, pch = 16, xlab = "soil pH", ylab = "PC 2", col = "blue")
+```
+
+##Mosaic
+```{r}
+mosaicplot(~ Shots.OT + Goals, data = worldcup2, color = c("green","red","blue")) #Lose, Draw, Win
+```
+
+## star plot
+```{r}
+stars(num_df, key.loc = c(15, 2), cex = 0.8, draw.segments = T)
+
+stars(win, key.loc = c(15, 2), cex = 0.8, draw.segments = T)
+stars(lose, key.loc = c(15, 2), cex = 0.8, draw.segments = T)
+stars(draw, key.loc = c(15, 2), cex = 0.8, draw.segments = T)
+```
+
+## Heatmap + Dendogram
+```{r}
+bball <- as.matrix(num_df)
+
+heatmap(bball) ## light color higher value. needs scaling
+heatmap(bball, scale = "column", Colv = NA) #scaled
+```
+
+## Dendogram with cutting lines
+```{r}
+#wc_dist = dist(worldcup2[,-9])
+#plot(cs <- hclust(wc_dist,method = "single"),main = "Single Linkage")
+
+#plot(cc <- hclust(wc_dist,method = "complete"), main = "Complete Linkage")
+#plot(ca <- hclust(wc_dist,method = "average"), main = "Average Linkage")
+
+
+HC <- hclust(wc_dist, "average")
+myDend <-  as.dendrogram(HC) 
+
+par(mar=c(7.5,4,2,2))
+plot(myDend, main = "Average Linkage")
+
+k = 3
+n = nrow(worldcup2)
+MidPoint = (HC$height[n-k] + HC$height[n-k+1]) / 2
+abline(h = MidPoint, lty=2)
+
+```
+
+ Now we run into the issue of choosing the "correct" amount of clusters, that is, where should we cut the dendogram? One method of determining this could be to look at how many groups a model-based clustering technique chooses, such as maximum-likelihood based clustering. However, upon further analysis, the model-based clustering chooses only 1 cluster, which does not help.
+```{r,echo=F}
+##Mclust
+library(mclust)
+mclus <- Mclust(worldcup2[,-9])
+mclus$classification
+```
+ 
+## PCA Cluster. a plot of each team listed by their cluster
+```{r,echo=F}
+
+cc <- hclust(wc_dist,method = "complete")
+##cc <- hclust(wc_dist,method = "single")
+##cc <- hclust(wc_dist,method = "average")
+
+
+clus_pca = princomp(worldcup2[,-9],cor=TRUE)
+xlim = range(clus_pca$scores[,1])
+
+par(mfrow = c(1,1))
+group1 <- worldcup2$Result == 'W' 
+group2 <- worldcup2$Result == 'D' 
+group3 <- worldcup2$Result == 'L' 
+lab = cutree(cc,k = 3);
+wc3 = worldcup2
+
+plot(clus_pca$scores[,1:2],type='n',xlim=xlim,ylim=xlim, main = "PCA Cluster")
+text(clus_pca$scores[,1][group1],clus_pca$scores[,2][group1],labels=lab[group1],cex=1.5,col='blue')
+text(clus_pca$scores[,1][group2],clus_pca$scores[,2][group2],labels=lab[group2],cex=1.5,col='red')
+text(clus_pca$scores[,1][group3],clus_pca$scores[,2][group3],labels=lab[group3],cex=1.5,col='green')
+legend("topleft",legend=c("Winners","Drawers","Losers"),cex=.75,
+       col=c("blue","red","green"),pch='|')
+```
